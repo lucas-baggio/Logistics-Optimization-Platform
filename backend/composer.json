@@ -15,6 +15,7 @@
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
         "laravel/sail": "^1.41",
+        "friendsofphp/php-cs-fixer": "^3.30",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
         "phpunit/phpunit": "^11.5.3"
@@ -66,6 +67,9 @@
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ]
+        ,
+        "cs:fix": "php-cs-fixer fix --verbose",
+        "cs:check": "php-cs-fixer fix --dry-run --diff"
     },
     "extra": {
         "laravel": {
