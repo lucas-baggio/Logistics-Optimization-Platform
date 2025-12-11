@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.root
+    image: lop/gateway
+    container_name: gateway
+    ports:
+      - "8080:8080"
+    networks:
+      - lop-network
+
+  backend:
+    build:
+      context: ./backend
+    image: lop/backend
+    container_name: backend
+    environment:
+      - GATEWAY_HOST=gateway
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=lop_db
+      - DB_USERNAME=lop_user
+      - DB_PASSWORD=lop_pass
+    networks:
+      - lop-network
+    depends_on:
+      - gateway
+
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_pass
+      - MYSQL_DATABASE=lop_db
+      - MYSQL_USER=lop_user
+      - MYSQL_PASSWORD=lop_pass
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mysql:/docker-entrypoint-initdb.d:ro
+    networks:
+      - lop-network
+
+  frontend:
+    build:
+      context: ./frontend
+    image: lop/frontend
+    container_name: frontend
+    environment:
+      - GATEWAY_HOST=gateway
+    ports:
+      - "4200:80"
+    networks:
+      - lop-network
+    depends_on:
+      - gateway
+
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: frontend-dev
+    volumes:
+      - ./frontend:/app:delegated
+      - /app/node_modules
+    ports:
+      - "4200:4200"
+    networks:
+      - lop-network
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - gateway
+
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: backend-dev
+    volumes:
+      - ./backend:/var/www:delegated
+    ports:
+      - "9000:9000"
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=1
+    networks:
+      - lop-network
+    depends_on:
+      - gateway
+
+networks:
+  lop-network:
+    external: true
+
+volumes:
+  db_data:
