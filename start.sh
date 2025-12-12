@@ -111,7 +111,48 @@ else
   $COMPOSE_CMD up -d --remove-orphans gateway db backend frontend
 fi
 
+print_link() {
+  # Use ANSI OSC 8 hyperlink if terminal supports, otherwise fall back to plain URL
+  local label="$1" url="$2"
+  # OSC-8 format: \x1b]8;;<url>\x1b\<label>\x1b]8;;\x1b\\
+  if [ -n "$url" ]; then
+    # Print the prefix in a way that avoids printf parsing any leading '-'
+    printf '%s' "- $label: "
+    # Print clickable label using OSC 8 (ESC ] 8 ;; URI BEL label ESC ] 8 ;; BEL) and also the URL for plain terminals
+    # Use \033 for ESC and \007 (BEL) as string terminator to avoid escaping complexity
+    printf '\033]8;;%s\007%s\033]8;;\007\n' "$url" "$url"
+  else
+    printf '%s\n' "- $label: (no host mapping, see container)"
+  fi
+}
+
 echo "[start.sh] Serviços iniciados (modo: $( [ "$DEV" = true ] && echo dev || echo prod ) )."
-echo "- gateway: container 'gateway' na rede $NETWORK (porta 8080 mapeada)"
-echo "- backend: container 'backend' (ou 'backend-dev') na rede $NETWORK (porta 9000 interna)"
-echo "- frontend: container 'frontend' (ou 'frontend-dev') na rede $NETWORK (porta 4200 mapeada)"
+
+# Decide URLs (host-accessible) depending on dev/prod mode
+GATEWAY_URL="http://localhost:8080"
+FRONTEND_URL="http://localhost:4200"
+BACKEND_DEV_URL="http://localhost:9000"
+
+echo "Abaixo estão os links para acessar os serviços (em ordem: frontend, gateway, API status, backend, database):"
+
+# 1) Frontend
+print_link "Frontend" "$FRONTEND_URL"
+
+# 2) Gateway (entry point / reverse proxy)
+print_link "Gateway (UI/API entry)" "$GATEWAY_URL"
+
+# 3) API Status endpoint
+print_link "API Status" "${BACKEND_DEV_URL}/api/status"
+
+# 4) Backend (dev only has host mapping)
+if [ "$DEV" = true ]; then
+  print_link "Backend (dev)" "$BACKEND_DEV_URL"
+else
+  # Production backend container does not expose a host port by default – show internal container URL
+  printf '%s\n' "- Backend (prod): http://backend:9000 (container-only; access via gateway)"
+fi
+
+# 5) Database information (internal container)
+printf '%s\n' "- Database: db:3306 (MySQL, container-only)."
+printf '%s\n' "  Se precisar de administração via web, adicione phpMyAdmin/ADMINER no docker-compose e exponha a porta 8081 por exemplo."
+
