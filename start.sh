@@ -9,6 +9,9 @@ set -euo pipefail
 NETWORK=lop-network
 COMPOSE_CMD=""
 
+# Skip starting DB container when using an external DB (set SKIP_DB=true)
+SKIP_DB=${SKIP_DB:-true}
+
 if command -v docker >/dev/null 2>&1; then
   if docker info >/dev/null 2>&1; then
     : # daemon acessível
@@ -81,18 +84,31 @@ if [ "$DEV" = true ]; then
   check_and_free_port 4200
   check_and_free_port 9000
   check_and_free_port 8080
+  if [ "$SKIP_DB" != "true" ]; then
+    check_and_free_port 3306
+  fi
 
   # remove existing containers with the same names to avoid name conflicts
-  for c in gateway backend-dev frontend-dev; do
+  RM_CONTAINERS=(gateway backend-dev frontend-dev)
+  if [ "$SKIP_DB" != "true" ]; then
+    RM_CONTAINERS+=(db)
+  fi
+  for c in "${RM_CONTAINERS[@]}"; do
     if docker ps -a --format '{{.Names}}' | grep -xq "$c"; then
       echo "[start.sh] Removendo container existente: $c"
       docker rm -f "$c" || true
     fi
   done
 
-  # build and up dev services (inclui db)
-  $COMPOSE_CMD build gateway db backend-dev frontend-dev
-  $COMPOSE_CMD up -d --remove-orphans gateway db backend-dev frontend-dev
+  # build and up dev services (inclui db a menos que SKIP_DB=true)
+  SERVICES_TO_BUILD=(gateway backend-dev frontend-dev)
+  SERVICES_TO_UP=(gateway backend-dev frontend-dev)
+  if [ "$SKIP_DB" != "true" ]; then
+    SERVICES_TO_BUILD+=(db)
+    SERVICES_TO_UP+=(db)
+  fi
+  $COMPOSE_CMD build "${SERVICES_TO_BUILD[@]}"
+  $COMPOSE_CMD up -d --remove-orphans "${SERVICES_TO_UP[@]}"
 else
   echo "[start.sh] Modo produção: subindo gateway + backend + frontend"
   # remove existing containers with the same names to avoid name conflicts
@@ -100,15 +116,27 @@ else
   check_and_free_port 4200
   check_and_free_port 9000
   check_and_free_port 8080
-
-  for c in gateway backend frontend db; do
+  if [ "$SKIP_DB" != "true" ]; then
+    check_and_free_port 3306
+  fi
+  RM_CONTAINERS=(gateway backend frontend)
+  if [ "$SKIP_DB" != "true" ]; then
+    RM_CONTAINERS+=(db)
+  fi
+  for c in "${RM_CONTAINERS[@]}"; do
     if docker ps -a --format '{{.Names}}' | grep -xq "$c"; then
       echo "[start.sh] Removendo container existente: $c"
       docker rm -f "$c" || true
     fi
   done
-  $COMPOSE_CMD build gateway db backend frontend
-  $COMPOSE_CMD up -d --remove-orphans gateway db backend frontend
+  SERVICES_TO_BUILD=(gateway backend frontend)
+  SERVICES_TO_UP=(gateway backend frontend)
+  if [ "$SKIP_DB" != "true" ]; then
+    SERVICES_TO_BUILD+=(db)
+    SERVICES_TO_UP+=(db)
+  fi
+  $COMPOSE_CMD build "${SERVICES_TO_BUILD[@]}"
+  $COMPOSE_CMD up -d --remove-orphans "${SERVICES_TO_UP[@]}"
 fi
 
 print_link() {
@@ -142,7 +170,11 @@ print_link "Frontend" "$FRONTEND_URL"
 print_link "Gateway (UI/API entry)" "$GATEWAY_URL"
 
 # 3) API Status endpoint
-print_link "API Status" "${BACKEND_DEV_URL}/api/status"
+if [ "$DEV" = true ]; then
+  print_link "API Status" "${BACKEND_DEV_URL}/api/status"
+else
+  print_link "API Status" "${GATEWAY_URL}/api/status"
+fi
 
 # 4) Backend (dev only has host mapping)
 if [ "$DEV" = true ]; then
@@ -153,6 +185,16 @@ else
 fi
 
 # 5) Database information (internal container)
-printf '%s\n' "- Database: db:3306 (MySQL, container-only)."
-printf '%s\n' "  Se precisar de administração via web, adicione phpMyAdmin/ADMINER no docker-compose e exponha a porta 8081 por exemplo."
+if [ "$SKIP_DB" != "true" ]; then
+  printf '%s\n' "- Database: db:3306 (MySQL, container-only)."
+  printf '%s\n' "  Se precisar de administração via web, adicione phpMyAdmin/ADMINER no docker-compose e exponha a porta 8081 por exemplo."
+else
+  # Determine DB host from environment or backend/.env; default to host.docker.internal for Docker Desktop
+  DB_HOST_DISPLAY=${DB_HOST:-$(grep -E '^DB_HOST=' backend/.env 2>/dev/null | cut -d'=' -f2 || true)}
+  if [ -z "$DB_HOST_DISPLAY" ]; then
+    DB_HOST_DISPLAY=host.docker.internal
+  fi
+  printf '%s\n' "- Database: external (using $DB_HOST_DISPLAY)."
+  printf '%s\n' "  Certifique-se de que $DB_HOST_DISPLAY esteja acessível e as credenciais em backend/.env estejam corretas."
+fi
 
