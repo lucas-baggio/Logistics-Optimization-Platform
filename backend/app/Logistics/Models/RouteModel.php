@@ -3,6 +3,7 @@
 namespace App\Logistics\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Class RouteModel
@@ -19,8 +20,35 @@ class RouteModel extends Model
     protected $table = 'routes';
 
     protected $fillable = [
-        'origin', 'destination', 'distance'
+        'vehicle_id',
+        'status',
+        'optimized_distance_km',
+        'optimized_duration_min',
+        'optimized_sequence_json',
+        'polyline_data',
+    ];
+
+    protected $casts = [
+        'optimized_distance_km' => 'float',
+        'optimized_duration_min' => 'integer',
+        'optimized_sequence_json' => 'array',
     ];
 
     public $timestamps = true;
+
+    /**
+     * Relationship to vehicle
+     */
+    public function vehicle(): BelongsTo
+    {
+        return $this->belongsTo(VehicleModel::class, 'vehicle_id');
+    }
+
+    /**
+     * Create from a DTO
+     */
+    public static function fromDTO(\App\Logistics\DTOs\RouteDTO $dto): self
+    {
+        return self::create($dto->toArray());
+    }
 }

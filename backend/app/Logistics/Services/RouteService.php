@@ -4,6 +4,7 @@ namespace App\Logistics\Services;
 
 use App\Logistics\DTOs\RouteDTO;
 use App\Logistics\Models\RouteModel;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
  * Class RouteService
@@ -20,7 +21,7 @@ class RouteService
      */
     public function find(int $id): ?RouteModel
     {
-        return RouteModel::find($id);
+        return RouteModel::with('vehicle')->find($id);
     }
 
     /**
@@ -31,12 +32,17 @@ class RouteService
      */
     public function create(RouteDTO $dto): RouteModel
     {
-        $model = new RouteModel();
-        $model->origin = $dto->getOrigin();
-        $model->destination = $dto->getDestination();
-        $model->distance = $dto->getDistance();
-        $model->save();
+        $model = RouteModel::create($dto->toArray());
+        return $model;
+    }
 
+    /**
+     * Update a route model from a DTO
+     */
+    public function update(RouteModel $model, RouteDTO $dto): RouteModel
+    {
+        $model->fill($dto->toArray());
+        $model->save();
         return $model;
     }
 
@@ -48,10 +54,30 @@ class RouteService
      */
     public function toDto(RouteModel $model): RouteDTO
     {
-        return new RouteDTO(
-            origin: $model->origin,
-            destination: $model->destination,
-            distance: $model->distance
-        );
+        return RouteDTO::fromModel($model);
+    }
+
+    /**
+     * List routes (paginated) optionally filtered by vehicle id
+     *
+     * @param int|null $vehicleId
+     * @param int $perPage
+     * @return LengthAwarePaginator
+     */
+    public function list(?int $vehicleId = null, int $perPage = 15): LengthAwarePaginator
+    {
+        $query = RouteModel::with('vehicle');
+        if ($vehicleId !== null) {
+            $query->where('vehicle_id', $vehicleId);
+        }
+        return $query->paginate($perPage);
+    }
+
+    /**
+     * Remove a route
+     */
+    public function delete(RouteModel $model): bool
+    {
+        return $model->delete();
     }
 }

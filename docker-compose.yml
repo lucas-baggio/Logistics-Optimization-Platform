@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   gateway:
@@ -34,6 +34,8 @@ services:
     image: mysql:8.0
     container_name: db
     restart: unless-stopped
+    ports:
+      - "3306:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=root_pass
       - MYSQL_DATABASE=lop_db
